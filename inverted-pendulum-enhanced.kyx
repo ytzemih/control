@@ -1,0 +1,204 @@
+﻿/* 
+ * Specialisation and replication of an inverted pendulum 
+ * stability proof by Tan and Platzer (2021),
+ * created by Mario Gleirscher,
+ * exported from KeYmaera 5.0.1.
+ */
+
+Theorem "Inverted Pendulum (enhanced, linear)"
+
+Definitions
+Bool in(Real x, Real y, Real r) <-> x^2 + y^2 < r^2;
+Bool at(Real x, Real y, Real r) <-> x^2 + y^2 = r^2;
+
+Real g;  /* gravity */
+Real m;  /* mass of the pendulum */
+Real l;  /* radius of the pendulum */
+Real a;  /* = k1/(m*l), mass m, controller tuning parameter k1 */
+Real b;  /* = (d*l+k2)/(m*l), with damping coefficient d and controller tuning parameter k2 */
+Real c;  /* = -g/l */
+Real d;  /* = a + c */
+Real p12; /* for adjusting pos/neg definiteness of V/Vdot */
+
+Real V(Real th, Real w) = m*l^2/2*(-(d+p12*b)*th^2 + 2*p12*th*w + w^2); /* Lyapunov func */
+
+Bool wellformed(Real th, Real w) <->
+    g > 0 & l > 0 & m > 0  
+    & a < 0 & b < 0 & c < 0 & d < 0 /* because k1,k2 < 0 */ 
+    & p12^2 < -a-b*p12 /* for pos. def. V */
+    & d*p12 < 0 & p12 > 0 & b < -p12; /* for neg. def. Vdot */
+
+/* Asymptotic stability */
+Bool stable <->
+    \forall ep (ep > 0 -> /* in D */
+    \exists dl (dl > 0 & /* in RoA(U) */
+    \forall th \forall w (in(th,w,dl) -> [{th'=w,w'=d*th+b*w}] in(th,w,ep))));
+Bool attractive <-> 
+    \exists dl (dl > 0 & /* in RoA(U) */
+    \forall th \forall w (in(th,w,dl) -> 
+    \forall ep (ep > 0 /* arbitrarily small, but in D */
+    -> <{th'=w,w'=d*th+b*w}> [{th'=w,w'=d*th+b*w}] in(th,w,ep))));
+Bool astab <-> stable & attractive;
+
+End.
+
+ProgramVariables Real th; Real w; End.
+
+Problem wellformed(th,w) -> astab End.
+
+Tactic "Inverted Pendulum (enhanced, linear): Proof"
+implyR('R=="wellformed(th,w)->astab()");
+expand("astab");
+cut("stable()&(stable()->attractive())"); <(
+  "Use":
+    propClose,
+  "Show":
+    hideR('R=="stable()&attractive()");
+    andR('R=="stable()&(stable()->attractive())"); <(
+      "stable()":
+        expand("stable");
+        unfold;
+        cut("\exists k (k>0&\forall th \forall w (at(th,w,ep)->V(th,w)>=k))"); <(
+          "Use":
+            unfold;
+            existsRmon("dl>0&dl < ep&\forall th \forall w (in(th,w,dl)->V(th,w) < k)", 'R=="\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep)))"); <(
+              "Use":
+                hideL('L=="\forall th \forall w (at(th,w,ep)->V(th,w)>=k)");
+                expandAllDefs();
+                QE,
+              "Show":
+                unfold;
+                allL('L=="\forall th \forall w (in(th,w,dl)->V(th,w) < k)");
+                allL('L=="\forall w (in(th,w,dl)->V(th,w) < k)");
+                fullSimplify;
+                dC("(at(th,w,ep)->V(th,w)>=k)&V(th,w) < k", 'R=="[{th'=w,w'=d()*th+b()*w}]in(th,w,ep)"); <(
+                  "Use":
+                    hideL('L=="\forall th \forall w (at(th,w,ep)->V(th,w)>=k)");
+                    expandAllDefs();
+                    ODE('R=="[{th'=w,w'=d()*th+b()*w&true&(th^2+w^2=ep^2->m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2)>=k)&m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2) < k}]th^2+w^2 < ep^2"),
+                  "Show":
+                    boxAnd('R=="[{th'=w,w'=d()*th+b()*w}]((at(th,w,ep)->V(th,w)>=k)&V(th,w) < k)");
+                    andR('R=="[{th'=w,w'=d()*th+b()*w}](at(th,w,ep)->V(th,w)>=k)&[{th'=w,w'=d()*th+b()*w}]V(th,w) < k"); <(
+                      "[{th'=w,w'=d()*th+b()*w}](at(th,w,ep)->V(th,w)>=k)":
+                        dW('R=="[{th'=w,w'=d()*th+b()*w}](at(th,w,ep)->V(th,w)>=k)");
+                        unfold;
+                        allL('L=="\forall th \forall w (at(th,w,ep)->V(th,w)>=k)");
+                        allL('L=="\forall w (at(th,w,ep)->V(th,w)>=k)");
+                        propClose,
+                      "[{th'=w,w'=d()*th+b()*w}]V(th,w) < k":
+                        hideL('L=="\forall th \forall w (at(th,w,ep)->V(th,w)>=k)");
+                        expandAllDefs();
+                        ODE('R=="[{th'=w,w'=d()*th+b()*w}]m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2) < k")
+                    )
+                )
+            ),
+          "Show":
+            hideR('R=="\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep)))");
+            expandAllDefs();
+            QE
+        ),
+      "stable()->attractive()":
+        implyR('R=="stable()->attractive()");
+        cut("\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep))))"); <(
+          "Use":
+            unfold;
+            expand("attractive");
+            existsR('R=="\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))))");
+            unfold;
+            allL('L=="\forall th \forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep)))");
+            allL('L=="\forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep)))");
+            expand("stable");
+            allL('L=="\forall ep (ep>0->\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))))");
+            fullSimplify;
+            unfold;
+            allL("dl", 'L=="\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep))");
+            fullSimplify;
+            kDomainDiamond("in(th,w,dl)", 'R=="<{th'=w,w'=d()*th+b()*w}>[{th'=w,w'=d()*th+b()*w}]in(th,w,ep)"); <(
+              "Use":
+                propClose,
+              "Show":
+                dC("in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep)", 'R=="[{th'=w,w'=d()*th+b()*w&true&![{th'=w,w'=d()*th+b()*w}]in(th,w,ep)}](!in(th,w,dl))"); <(
+                  "Use":
+                    dW('R=="[{th'=w,w'=d()*th+b()*w&(true&![{th'=w,w'=d()*th+b()*w}]in(th,w,ep))&(in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))}](!in(th,w,dl))");
+                    unfold,
+                  "Show":
+                    dW('R=="[{th'=w,w'=d()*th+b()*w&true&![{th'=w,w'=d()*th+b()*w}]in(th,w,ep)}](in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))");
+                    unfold;
+                    allL('L=="\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))");
+                    allL('L=="\forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))");
+                    propClose
+                )
+            ),
+          "Show":
+            hideR('R=="attractive()");
+            expand("stable");
+            allL("1", 'L=="\forall ep (ep>0->\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,ep))))");
+            implyL('L=="1>0->\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,1)))"); <(
+              "1>0":
+                hideR('R=="\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep))))");
+                QE,
+              "\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,1)))":
+                unfold;
+                existsR('R=="\exists dl (dl>0&\forall th \forall w (in(th,w,dl)->\forall ep (ep>0-><{th'=w,w'=d()*th+b()*w}>in(th,w,ep))))");
+                unfold;
+                allL('L=="\forall th \forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,1))");
+                allL('L=="\forall w (in(th,w,dl)->[{th'=w,w'=d()*th+b()*w}]in(th,w,1))");
+                fullSimplify;
+                cut("\exists bot \forall th \forall w (in(th,w,1)->V(th,w)>=bot)"); <(
+                  "Use":
+                    unfold;
+                    compatCut("!in(th,w,ep)", 'R=="<{th'=w,w'=d()*th+b()*w}>in(th,w,ep)"); <(
+                      "Use":
+                        kDomainDiamond("V(th,w) < bot", 'R=="<{th'=w,w'=d()*th+b()*w}>in(th,w,ep)"); <(
+                          "Use":
+                            hideL('L=="\forall th \forall w (in(th,w,1)->V(th,w)>=bot)");
+                            expand("V");
+                            dV('R=="<{th'=w,w'=d()*th+b()*w}>m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2) < bot");
+                            cut("\exists eps (eps>0&\forall th \forall w (in(th,w,1)&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps))"); <(
+                              "Use":
+                                unfold;
+                                existsR('R=="\exists eps (eps>0&\forall th \forall w (((true&bot-m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2)<=0)&in(th,w,1))&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps))");
+                                andR('R=="eps>0&\forall th \forall w (((true&bot-m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2)<=0)&in(th,w,1))&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps)"); <(
+                                  "eps>0":
+                                    unfold,
+                                  "\forall th \forall w (((true&bot-m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2)<=0)&in(th,w,1))&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps)":
+                                    unfold;
+                                    allL('L=="\forall th \forall w (in(th,w,1)&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps)");
+                                    allL('L=="\forall w (in(th,w,1)&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps)");
+                                    implyL('L=="in(th,w,1)&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps"); <(
+                                      "in(th,w,1)&!in(th,w,ep)":
+                                        expandAllDefs();
+                                        QE,
+                                      "-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps":
+                                        propClose
+                                    )
+                                ),
+                              "Show":
+                                hideR('R=="\exists eps (eps>0&\forall th \forall w (((true&bot-m()*l()^2/2*(-(d()+p12()*b())*th^2+2*p12()*th*w+w^2)<=0)&in(th,w,1))&!in(th,w,ep)->-m()*l()^2/2*(2*p12()*w*w+2*p12()*th*(d()*th+b()*w)-(d()+p12()*b())*(2*th*w)+2*w*(d()*th+b()*w))>=eps))");
+                                QE
+                            ),
+                          "Show":
+                            dW('R=="[{th'=w,w'=d()*th+b()*w&(true&!in(th,w,ep))&in(th,w,1)}](!V(th,w) < bot)");
+                            unfold;
+                            allL('L=="\forall th \forall w (in(th,w,1)->V(th,w)>=bot)");
+                            allL('L=="\forall w (in(th,w,1)->V(th,w)>=bot)");
+                            fullSimplify;
+                            propClose
+                        ),
+                      "Show":
+                        diamondd('R=="<{th'=w,w'=d()*th+b()*w}>in(th,w,ep)");
+                        propClose
+                    ),
+                  "Show":
+                    hideR('R=="<{th'=w,w'=d()*th+b()*w}>in(th,w,ep)");
+                    hideL('L=="[{th'=w,w'=d()*th+b()*w}]in(th,w,1)");
+                    expandAllDefs();
+                    QE
+                )
+            )
+        )
+    )
+)
+End.
+
+End.
